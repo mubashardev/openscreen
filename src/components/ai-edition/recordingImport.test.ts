@@ -88,4 +88,35 @@ describe("importPendingRecording", () => {
 			"Auto-imported recording",
 		);
 	});
+
+	it("preserves webcamPosition from the recording session into editor document settings", async () => {
+		const session = {
+			screenVideoPath: "/recordings/recording-1.webm",
+			createdAt: 0,
+			webcamPosition: { cx: 0.85, cy: 0.8 },
+		};
+		// biome-ignore lint/suspicious/noExplicitAny: test stub
+		(window as any).electronAPI = {
+			getCurrentRecordingSession: vi.fn(async () => ({ success: true, session })),
+			setCurrentRecordingSession: vi.fn(async () => ({ success: true })),
+		};
+
+		addAsset.mockImplementationOnce(async () => {
+			useProjectStore.setState({
+				document: {
+					assets: [{ id: "a1" }],
+					timeline: { clips: [{ id: "c1" }] },
+					legacyEditor: {},
+					// biome-ignore lint/suspicious/noExplicitAny: only fields needed for test
+				} as any,
+			});
+			return null;
+		});
+
+		await importPendingRecording();
+
+		const doc = useProjectStore.getState().document;
+		expect(doc?.legacyEditor?.webcamPosition).toEqual({ cx: 0.85, cy: 0.8 });
+		expect(doc?.legacyEditor?.webcamLayoutPreset).toBe("picture-in-picture");
+	});
 });

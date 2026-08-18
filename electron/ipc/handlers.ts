@@ -3220,6 +3220,7 @@ export function registerIpcHandlers(
 					createdAt,
 					...(webcamOffsetMs !== undefined ? { webcamOffsetMs } : {}),
 					...(cursorCaptureMode ? { cursorCaptureMode } : {}),
+					...(payload.webcamPosition ? { webcamPosition: payload.webcamPosition } : {}),
 				}
 			: { screenVideoPath, createdAt, ...(cursorCaptureMode ? { cursorCaptureMode } : {}) };
 		setCurrentRecordingSessionState(session);

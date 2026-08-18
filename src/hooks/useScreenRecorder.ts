@@ -230,6 +230,21 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		};
 	}, []);
 
+	// Open/update or close the floating draggable camera preview window when webcam is toggled
+	useEffect(() => {
+		if (webcamEnabled) {
+			void window.electronAPI?.showCameraPreview?.(webcamDeviceId);
+		} else {
+			void window.electronAPI?.hideCameraPreview?.();
+		}
+	}, [webcamEnabled, webcamDeviceId]);
+
+	useEffect(() => {
+		return () => {
+			void window.electronAPI?.hideCameraPreview?.();
+		};
+	}, []);
+
 	const screenRecorder = useRef<RecorderHandle | null>(null);
 	const webcamRecorder = useRef<RecorderHandle | null>(null);
 	const nativeWindowsRecording = useRef<NativeWindowsRecordingHandle | null>(null);
@@ -504,6 +519,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					}
 					webcamIncludedInSave = webcamVideoData !== undefined;
 
+					const cameraPreviewPos = await window.electronAPI?.getCameraPreviewPosition?.();
 					const result = await window.electronAPI.storeRecordedSession({
 						screen: {
 							videoData: screenVideoData,
@@ -516,6 +532,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						createdAt: activeRecordingId,
 						cursorCaptureMode,
 						durationMs: duration,
+						webcamPosition: cameraPreviewPos ?? undefined,
 					});
 
 					if (!result.success) {
@@ -526,11 +543,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					storeSucceeded = true;
 
 					if (result.session) {
+						if (cameraPreviewPos) {
+							result.session.webcamPosition = cameraPreviewPos;
+						}
 						await window.electronAPI.setCurrentRecordingSession(result.session);
 					} else if (result.path) {
 						await window.electronAPI.setCurrentVideoPath(result.path);
 					}
 
+					await window.electronAPI?.hideCameraPreview?.();
 					await window.electronAPI.switchToEditor();
 				} catch (error) {
 					console.error("Error saving recording:", error);
@@ -601,11 +622,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			clearNativeRecordingState();
 			if (result.session) {
+				const cameraPreviewPos = await window.electronAPI?.getCameraPreviewPosition?.();
+				if (cameraPreviewPos) {
+					result.session.webcamPosition = cameraPreviewPos;
+				}
 				await window.electronAPI.setCurrentRecordingSession(result.session);
 			} else if (result.path) {
 				await window.electronAPI.setCurrentVideoPath(result.path);
 			}
 
+			await window.electronAPI?.hideCameraPreview?.();
 			await window.electronAPI.switchToEditor();
 			return true;
 		} catch (error) {
@@ -711,11 +737,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 				clearNativeRecordingState();
 				if (result.session) {
+					const cameraPreviewPos = await window.electronAPI?.getCameraPreviewPosition?.();
+					if (cameraPreviewPos) {
+						result.session.webcamPosition = cameraPreviewPos;
+					}
 					await window.electronAPI.setCurrentRecordingSession(result.session);
 				} else if (result.path) {
 					await window.electronAPI.setCurrentVideoPath(result.path);
 				}
 
+				await window.electronAPI?.hideCameraPreview?.();
 				await window.electronAPI.switchToEditor();
 				return true;
 			} catch (error) {
@@ -829,11 +860,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 				clearNativeRecordingState();
 				if (result.session) {
+					const cameraPreviewPos = await window.electronAPI?.getCameraPreviewPosition?.();
+					if (cameraPreviewPos) {
+						result.session.webcamPosition = cameraPreviewPos;
+					}
 					await window.electronAPI.setCurrentRecordingSession(result.session);
 				} else if (result.path) {
 					await window.electronAPI.setCurrentVideoPath(result.path);
 				}
 
+				await window.electronAPI?.hideCameraPreview?.();
 				await window.electronAPI.switchToEditor();
 				return true;
 			} catch (error) {

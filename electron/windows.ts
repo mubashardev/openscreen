@@ -550,3 +550,193 @@ export function createNotesWindow(): BrowserWindow {
 
 	return win;
 }
+
+let cameraPreviewWindow: BrowserWindow | null = null;
+let cameraPreviewDragOrigin: { x: number; y: number } | null = null;
+let cameraPreviewPosition: { cx: number; cy: number } | null = null;
+
+export function getCameraPreviewWindow(): BrowserWindow | null {
+	return cameraPreviewWindow;
+}
+
+export function getCameraPreviewPosition(): { cx: number; cy: number } | null {
+	if (cameraPreviewWindow && !cameraPreviewWindow.isDestroyed()) {
+		const bounds = cameraPreviewWindow.getBounds();
+		const disp = screen.getDisplayMatching(bounds);
+		const workArea = disp.workArea;
+		const cx = Math.max(
+			0,
+			Math.min(1, (bounds.x + bounds.width / 2 - workArea.x) / workArea.width),
+		);
+		const cy = Math.max(
+			0,
+			Math.min(1, (bounds.y + bounds.height / 2 - workArea.y) / workArea.height),
+		);
+		cameraPreviewPosition = { cx, cy };
+	}
+	return cameraPreviewPosition;
+}
+
+/**
+ * Floating draggable camera preview overlay that appears when the user turns on the camera.
+ * Content-protected so it is excluded from screen recordings.
+ */
+export function createCameraPreviewWindow(deviceId?: string): BrowserWindow {
+	if (cameraPreviewWindow && !cameraPreviewWindow.isDestroyed()) {
+		if (deviceId) {
+			cameraPreviewWindow.webContents.send("camera-preview-device-changed", deviceId);
+		}
+		if (!cameraPreviewWindow.isVisible()) {
+			if (!HEADLESS) cameraPreviewWindow.showInactive();
+		}
+		return cameraPreviewWindow;
+	}
+
+	const primaryDisplay = screen.getPrimaryDisplay();
+	const { workArea } = primaryDisplay;
+
+	const previewWidth = 260;
+	const previewHeight = 195;
+	const margin = 28;
+
+	// Bottom-right of primary display with proper padding
+	const x = Math.floor(workArea.x + workArea.width - previewWidth - margin);
+	const y = Math.floor(workArea.y + workArea.height - previewHeight - margin);
+
+	cameraPreviewPosition = {
+		cx: Math.max(0, Math.min(1, (x + previewWidth / 2 - workArea.x) / workArea.width)),
+		cy: Math.max(0, Math.min(1, (y + previewHeight / 2 - workArea.y) / workArea.height)),
+	};
+
+	const win = new BrowserWindow({
+		width: previewWidth,
+		height: previewHeight,
+		minWidth: 160,
+		minHeight: 120,
+		x,
+		y,
+		frame: false,
+		transparent: true,
+		backgroundColor: "#00000000",
+		roundedCorners: false,
+		resizable: false,
+		alwaysOnTop: true,
+		skipTaskbar: true,
+		hasShadow: false,
+		show: false,
+		webPreferences: {
+			preload: path.join(__dirname, "preload.mjs"),
+			additionalArguments: [ASSET_BASE_URL_ARG],
+			nodeIntegration: false,
+			contextIsolation: true,
+			backgroundThrottling: false,
+		},
+	});
+
+	applyContentProtection(win, "CameraPreview");
+
+	if (process.platform === "darwin") {
+		win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+	}
+
+	win.once("ready-to-show", () => {
+		applyContentProtection(win, "CameraPreview");
+		if (!HEADLESS) win.showInactive();
+		if (deviceId) {
+			win.webContents.send("camera-preview-device-changed", deviceId);
+		}
+	});
+
+	cameraPreviewWindow = win;
+
+	win.on("closed", () => {
+		if (cameraPreviewWindow === win) {
+			cameraPreviewWindow = null;
+			cameraPreviewDragOrigin = null;
+		}
+	});
+
+	const routing = { windowType: "camera-preview", ...(deviceId ? { deviceId } : {}) };
+	if (VITE_DEV_SERVER_URL) {
+		win.loadURL(`${VITE_DEV_SERVER_URL}?${new URLSearchParams(routing).toString()}`);
+	} else {
+		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
+			query: routing,
+		});
+	}
+
+	return win;
+}
+
+export function hideCameraPreviewWindow() {
+	if (cameraPreviewWindow && !cameraPreviewWindow.isDestroyed()) {
+		cameraPreviewWindow.close();
+		cameraPreviewWindow = null;
+		cameraPreviewDragOrigin = null;
+	}
+}
+
+ipcMain.on("camera-preview-drag-start", () => {
+	if (!cameraPreviewWindow || cameraPreviewWindow.isDestroyed()) {
+		return;
+	}
+	const [x, y] = cameraPreviewWindow.getPosition();
+	cameraPreviewDragOrigin = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+});
+
+ipcMain.on("camera-preview-drag-to", (_event, deltaX: number, deltaY: number) => {
+	if (
+		!cameraPreviewWindow ||
+		cameraPreviewWindow.isDestroyed() ||
+		!cameraPreviewDragOrigin ||
+		!Number.isFinite(deltaX) ||
+		!Number.isFinite(deltaY)
+	) {
+		return;
+	}
+	const x = Math.round(cameraPreviewDragOrigin.x + deltaX) | 0;
+	const y = Math.round(cameraPreviewDragOrigin.y + deltaY) | 0;
+	cameraPreviewWindow.setPosition(x, y, false);
+});
+
+ipcMain.on("camera-preview-drag-end", () => {
+	cameraPreviewDragOrigin = null;
+	if (cameraPreviewWindow && !cameraPreviewWindow.isDestroyed()) {
+		const bounds = cameraPreviewWindow.getBounds();
+		const disp = screen.getDisplayMatching(bounds);
+		const workArea = disp.workArea;
+		const cx = Math.max(
+			0,
+			Math.min(1, (bounds.x + bounds.width / 2 - workArea.x) / workArea.width),
+		);
+		const cy = Math.max(
+			0,
+			Math.min(1, (bounds.y + bounds.height / 2 - workArea.y) / workArea.height),
+		);
+		cameraPreviewPosition = { cx, cy };
+	}
+});
+
+ipcMain.handle("camera-preview-show", (_event, deviceId?: string) => {
+	createCameraPreviewWindow(deviceId);
+	return { success: true };
+});
+
+ipcMain.handle("camera-preview-hide", () => {
+	hideCameraPreviewWindow();
+	return { success: true };
+});
+
+ipcMain.handle("camera-preview-get-position", () => {
+	return getCameraPreviewPosition();
+});
+
+ipcMain.handle("camera-preview-set-position", (_event, pos: { cx: number; cy: number }) => {
+	if (pos && typeof pos.cx === "number" && typeof pos.cy === "number") {
+		cameraPreviewPosition = {
+			cx: Math.max(0, Math.min(1, pos.cx)),
+			cy: Math.max(0, Math.min(1, pos.cy)),
+		};
+	}
+	return { success: true };
+});

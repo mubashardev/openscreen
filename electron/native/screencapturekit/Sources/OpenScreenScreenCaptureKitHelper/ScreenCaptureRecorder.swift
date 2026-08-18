@@ -401,8 +401,14 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			}
 			let width = Int(CGDisplayPixelsWide(display.displayID))
 			let height = Int(CGDisplayPixelsHigh(display.displayID))
+			let parentPid = getppid()
+			let currentPid = getpid()
+			let excluding = content.windows.filter { window in
+				guard let app = window.owningApplication else { return false }
+				return app.processID == parentPid || app.processID == currentPid
+			}
 			return CaptureTarget(
-				filter: SCContentFilter(display: display, excludingWindows: []),
+				filter: SCContentFilter(display: display, excludingWindows: excluding),
 				width: clampCaptureDimension(width, fallback: request.video.width),
 				height: clampCaptureDimension(height, fallback: request.video.height),
 				captureFrame: display.frame

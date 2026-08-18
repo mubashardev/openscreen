@@ -11,6 +11,7 @@ export interface ProjectMedia {
 	 */
 	webcamOffsetMs?: number;
 	cursorCaptureMode?: CursorCaptureMode;
+	webcamPosition?: { cx: number; cy: number } | null;
 }
 
 export type CursorCaptureMode = "editable-overlay" | "system";
@@ -38,10 +39,31 @@ export interface StoreRecordedSessionInput {
 	durationMs?: number;
 	/** See {@link ProjectMedia.webcamOffsetMs}. */
 	webcamOffsetMs?: number;
+	webcamPosition?: { cx: number; cy: number } | null;
 }
 
 export function normalizeCursorCaptureMode(value: unknown): CursorCaptureMode | undefined {
 	return value === "editable-overlay" || value === "system" ? value : undefined;
+}
+
+function normalizeWebcamPosition(
+	candidate: unknown,
+): { cx: number; cy: number } | null | undefined {
+	if (candidate === null) return null;
+	if (!candidate || typeof candidate !== "object") return undefined;
+	const raw = candidate as { cx?: unknown; cy?: unknown };
+	if (
+		typeof raw.cx === "number" &&
+		Number.isFinite(raw.cx) &&
+		typeof raw.cy === "number" &&
+		Number.isFinite(raw.cy)
+	) {
+		return {
+			cx: Math.max(0, Math.min(1, raw.cx)),
+			cy: Math.max(0, Math.min(1, raw.cy)),
+		};
+	}
+	return undefined;
 }
 
 function normalizePath(value: unknown): string | undefined {
@@ -67,6 +89,7 @@ export function normalizeProjectMedia(candidate: unknown): ProjectMedia | null {
 
 	const webcamVideoPath = normalizePath(raw.webcamVideoPath);
 	const cursorCaptureMode = normalizeCursorCaptureMode(raw.cursorCaptureMode);
+	const webcamPosition = normalizeWebcamPosition(raw.webcamPosition);
 	const webcamOffsetMs =
 		typeof raw.webcamOffsetMs === "number" && Number.isFinite(raw.webcamOffsetMs)
 			? raw.webcamOffsetMs
@@ -77,6 +100,7 @@ export function normalizeProjectMedia(candidate: unknown): ProjectMedia | null {
 		...(webcamVideoPath ? { webcamVideoPath } : {}),
 		...(webcamOffsetMs !== undefined ? { webcamOffsetMs } : {}),
 		...(cursorCaptureMode ? { cursorCaptureMode } : {}),
+		...(webcamPosition !== undefined ? { webcamPosition } : {}),
 	};
 }
 

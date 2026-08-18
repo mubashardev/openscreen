@@ -92,6 +92,35 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setHudOverlaySize: (width: number, height: number) => {
 		ipcRenderer.send("hud-overlay-set-size", width, height);
 	},
+	showCameraPreview: (deviceId?: string) => {
+		return ipcRenderer.invoke("camera-preview-show", deviceId) as Promise<{ success: boolean }>;
+	},
+	hideCameraPreview: () => {
+		return ipcRenderer.invoke("camera-preview-hide") as Promise<{ success: boolean }>;
+	},
+	getCameraPreviewPosition: () => {
+		return ipcRenderer.invoke("camera-preview-get-position") as Promise<{
+			cx: number;
+			cy: number;
+		} | null>;
+	},
+	setCameraPreviewPosition: (pos: { cx: number; cy: number }) => {
+		return ipcRenderer.invoke("camera-preview-set-position", pos) as Promise<{ success: boolean }>;
+	},
+	beginCameraPreviewDrag: () => {
+		ipcRenderer.send("camera-preview-drag-start");
+	},
+	dragCameraPreviewTo: (deltaX: number, deltaY: number) => {
+		ipcRenderer.send("camera-preview-drag-to", deltaX, deltaY);
+	},
+	endCameraPreviewDrag: () => {
+		ipcRenderer.send("camera-preview-drag-end");
+	},
+	onCameraPreviewDeviceChanged: (cb: (deviceId: string) => void) => {
+		const handler = (_e: unknown, deviceId: string) => cb(deviceId);
+		ipcRenderer.on("camera-preview-device-changed", handler);
+		return () => ipcRenderer.off("camera-preview-device-changed", handler);
+	},
 	getSources: async (opts: Electron.SourcesOptions) => {
 		return await ipcRenderer.invoke("get-sources", opts);
 	},

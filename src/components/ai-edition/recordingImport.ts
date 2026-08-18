@@ -14,6 +14,7 @@
 // derived `currentVideoPath`); the only renderer that still needs the session
 // after this point is the CLI runner, which lives in its own process.
 
+import { patchEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 
 /**
@@ -29,7 +30,8 @@ export async function importPendingRecording(): Promise<boolean> {
 	if (!api) return false;
 
 	const result = await api.getCurrentRecordingSession();
-	const screenPath = result.success ? result.session?.screenVideoPath : undefined;
+	const session = result.success ? result.session : undefined;
+	const screenPath = session?.screenVideoPath;
 	if (!screenPath) return false;
 
 	const label = screenPath.split(/[\\/]/).pop() || "Recording";
@@ -45,11 +47,21 @@ export async function importPendingRecording(): Promise<boolean> {
 	// asset, drop a default 60s clip into the timeline so the editor isn't stuck
 	// on "No clips yet" the moment the user lands in the project. Real duration
 	// overwrites this when handleLoadedMetadata fires with a finite value.
-	const doc = useProjectStore.getState().document;
+	let doc = useProjectStore.getState().document;
 	if (doc && doc.timeline.clips.length === 0 && doc.assets.length > 0) {
 		await useProjectStore
 			.getState()
 			.replaceTimeline([{ startSec: 0, endSec: 60 }], "Auto-imported recording");
+		doc = useProjectStore.getState().document;
 	}
+
+	if (session?.webcamPosition && doc) {
+		const updated = patchEditorSettings(doc, {
+			webcamPosition: session.webcamPosition,
+			webcamLayoutPreset: "picture-in-picture",
+		});
+		useProjectStore.setState({ document: updated });
+	}
+
 	return true;
 }

@@ -401,6 +401,14 @@ interface Window {
 		dragHudOverlayTo: (deltaX: number, deltaY: number) => void;
 		endHudOverlayDrag: () => void;
 		setHudOverlaySize: (width: number, height: number) => void;
+		showCameraPreview: (deviceId?: string) => Promise<{ success: boolean }>;
+		hideCameraPreview: () => Promise<{ success: boolean }>;
+		getCameraPreviewPosition: () => Promise<{ cx: number; cy: number } | null>;
+		setCameraPreviewPosition: (pos: { cx: number; cy: number }) => Promise<{ success: boolean }>;
+		beginCameraPreviewDrag: () => void;
+		dragCameraPreviewTo: (deltaX: number, deltaY: number) => void;
+		endCameraPreviewDrag: () => void;
+		onCameraPreviewDeviceChanged: (callback: (deviceId: string) => void) => () => void;
 		showCountdownOverlay: (value: number, runId: number) => Promise<void>;
 		setCountdownOverlayValue: (value: number, runId: number) => Promise<void>;
 		hideCountdownOverlay: (runId: number) => Promise<void>;
