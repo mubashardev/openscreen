@@ -83,42 +83,45 @@ export function CameraPreviewOverlay() {
 		};
 	}, [activeDeviceId]);
 
-	// Draggability across the screen
+	// Smooth draggability across the screen using global OS screen coordinates
+	const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
+	const lastDragDeltaRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
 	const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
 		if (event.button !== 0) return; // Only primary mouse button
-		const target = event.currentTarget;
 		event.preventDefault();
 		event.stopPropagation();
 
+		event.currentTarget.setPointerCapture(event.pointerId);
+		dragOriginRef.current = { x: event.screenX, y: event.screenY };
+		lastDragDeltaRef.current = { x: 0, y: 0 };
 		setIsDragging(true);
-		target.setPointerCapture(event.pointerId);
 		window.electronAPI?.beginCameraPreviewDrag?.();
+	}, []);
 
-		const startClientX = event.clientX;
-		const startClientY = event.clientY;
+	const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+		const origin = dragOriginRef.current;
+		if (!origin) return;
+		const deltaX = event.screenX - origin.x;
+		const deltaY = event.screenY - origin.y;
+		const last = lastDragDeltaRef.current;
+		if (last.x === deltaX && last.y === deltaY) return;
+		lastDragDeltaRef.current = { x: deltaX, y: deltaY };
+		window.electronAPI?.dragCameraPreviewTo?.(deltaX, deltaY);
+	}, []);
 
-		const handlePointerMove = (e: PointerEvent) => {
-			const deltaX = e.clientX - startClientX;
-			const deltaY = e.clientY - startClientY;
-			window.electronAPI?.dragCameraPreviewTo?.(deltaX, deltaY);
-		};
-
-		const handlePointerUp = () => {
-			setIsDragging(false);
-			target.removeEventListener("pointermove", handlePointerMove);
-			target.removeEventListener("pointerup", handlePointerUp);
-			target.removeEventListener("pointercancel", handlePointerUp);
+	const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+		if (!dragOriginRef.current) return;
+		dragOriginRef.current = null;
+		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			try {
-				target.releasePointerCapture(event.pointerId);
+				event.currentTarget.releasePointerCapture(event.pointerId);
 			} catch {
 				// pointer already released
 			}
-			window.electronAPI?.endCameraPreviewDrag?.();
-		};
-
-		target.addEventListener("pointermove", handlePointerMove);
-		target.addEventListener("pointerup", handlePointerUp);
-		target.addEventListener("pointercancel", handlePointerUp);
+		}
+		setIsDragging(false);
+		window.electronAPI?.endCameraPreviewDrag?.();
 	}, []);
 
 	return (
@@ -126,6 +129,9 @@ export function CameraPreviewOverlay() {
 			<div
 				className={`${styles.previewCard} ${isDragging ? styles.dragging : ""}`}
 				onPointerDown={handlePointerDown}
+				onPointerMove={handlePointerMove}
+				onPointerUp={handlePointerUp}
+				onPointerCancel={handlePointerUp}
 				title="Drag to position camera"
 			>
 				<video
